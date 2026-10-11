@@ -322,6 +322,44 @@ const TERR = {"g":[[[[[126.95,33.48],[126.84,33.31],[126.57,33.23],[126.33,33.24
 map.createPane('terr').style.zIndex = 350;
 map.createPane('terrLabel').style.zIndex = 620; // 마커(600) 위: 이름표가 가려지지 않게(클릭은 통과)
 const terrLayer = L.layerGroup().addTo(map);
+
+// 영토 경계를 곡선으로 그리기: 꼭짓점 사이를 centripetal Catmull-Rom 스플라인으로 잇고 3차 베지어 SVG 경로로 바꾼다.
+// 좌표 데이터는 손대지 않고 렌더링 단계(화면 픽셀 좌표)에서만 처리하므로, 확대·축소해도 늘 매끄럽다.
+// 이웃 나라가 같은 경계 좌표를 공유하면 같은 곡선이 나와 틈이 벌어지지 않는다.
+const smoothRing = pts => {
+  const q = [];
+  for (const p of pts) if (!q.length || Math.abs(p.x - q[q.length - 1].x) > .05 || Math.abs(p.y - q[q.length - 1].y) > .05) q.push(p);
+  if (q.length > 1 && Math.abs(q[0].x - q[q.length - 1].x) < .05 && Math.abs(q[0].y - q[q.length - 1].y) < .05) q.pop();
+  const n = q.length;
+  if (n < 3) return '';
+  const f = v => Math.round(v * 10) / 10;
+  let d = `M${f(q[0].x)} ${f(q[0].y)}`;
+  for (let i = 0; i < n; i++) {
+    const p0 = q[(i + n - 1) % n], p1 = q[i], p2 = q[(i + 1) % n], p3 = q[(i + 2) % n];
+    // alpha = 0.5 (centripetal): 꼭짓점 간격이 들쭉날쭉해도 고리나 뾰족한 돌출이 생기지 않는다
+    const d1 = Math.sqrt(Math.hypot(p1.x - p0.x, p1.y - p0.y)), d2 = Math.sqrt(Math.hypot(p2.x - p1.x, p2.y - p1.y)), d3 = Math.sqrt(Math.hypot(p3.x - p2.x, p3.y - p2.y));
+    let b1 = p1, b2 = p2;
+    if (d1 > 1e-4 && d2 > 1e-4) {
+      const a = d1 * d1, b = d2 * d2, k = 3 * d1 * (d1 + d2);
+      b1 = { x: (a * p2.x - b * p0.x + (2 * a + 3 * d1 * d2 + b) * p1.x) / k, y: (a * p2.y - b * p0.y + (2 * a + 3 * d1 * d2 + b) * p1.y) / k };
+    }
+    if (d3 > 1e-4 && d2 > 1e-4) {
+      const a = d3 * d3, b = d2 * d2, k = 3 * d3 * (d3 + d2);
+      b2 = { x: (a * p1.x - b * p3.x + (2 * a + 3 * d3 * d2 + b) * p2.x) / k, y: (a * p1.y - b * p3.y + (2 * a + 3 * d3 * d2 + b) * p2.y) / k };
+    }
+    d += `C${f(b1.x)} ${f(b1.y)} ${f(b2.x)} ${f(b2.y)} ${f(p2.x)} ${f(p2.y)}`;
+  }
+  return d + 'z';
+};
+const _updatePoly = L.SVG.prototype._updatePoly;
+L.SVG.include({
+  _updatePoly(layer, closed) {
+    if (!closed || !layer.options.smooth) return _updatePoly.call(this, layer, closed);
+    const d = layer._parts.map(smoothRing).join('');
+    this._setPath(layer, d || 'M0 0');
+  }
+});
+
 let terrSlice;
 function drawTerr(y) {
   const s = y == null ? null : TERR.s.find(t => t[0] <= y && y < t[1]);
@@ -331,7 +369,8 @@ function drawTerr(y) {
   for (const [name, color, icon, gi, lab] of s ? s[2] : []) {
     const key = name.split(' (')[0];
     L.geoJSON({ type: 'MultiPolygon', coordinates: TERR.g[gi] }, {
-      pane: 'terr', style: { color: '#555', weight: .8, opacity: .4, fillColor: color, fillOpacity: .18 }
+      pane: 'terr', smooth: true, smoothFactor: .6, lineJoin: 'round',
+      style: { color: '#555', weight: .8, opacity: .4, fillColor: color, fillOpacity: .18 }
     })
       .on('click', () => showCountry(key, icon, color))
       .on('mouseover', e => e.layer.setStyle({ weight: 1.8, fillOpacity: .3 }))
