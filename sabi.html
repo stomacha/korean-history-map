@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>사비성 함락</title>
+<meta name="description" content="660년 백제 사비성. 버튼 하나면 끝납니다.">
+<meta property="og:title" content="사비성 함락 — 히히 나당동맹군 부르기">
+<meta property="og:description" content="660년 백제 사비성. 버튼 하나면 끝납니다.">
+<style>
+:root{--ink:#2b1d14;--paper:#f3e6c8;--red:#b3261e}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#9cc8e8;font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;color:var(--ink)}
+canvas{display:block;touch-action:none}
+#top{position:fixed;top:14px;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 16px;text-align:center}
+h1{margin:0;font-size:clamp(18px,4.5vw,26px);color:#fff;text-shadow:0 2px 6px #0009}
+#call{pointer-events:auto;font:inherit;font-weight:800;font-size:clamp(16px,4.4vw,22px);padding:14px 24px;border:3px solid #fff;border-radius:999px;background:linear-gradient(#d6362c,#8f1b14);color:#fff;box-shadow:0 6px 0 #5a0f0a,0 10px 24px #0006;cursor:pointer;transition:opacity .4s}
+#call:active{transform:translateY(4px);box-shadow:0 2px 0 #5a0f0a}
+#call[disabled]{opacity:0;pointer-events:none}
+#hint{color:#fff;font-size:13px;text-shadow:0 1px 4px #000c}
+#cap{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);width:max-content;max-width:min(640px,calc(100% - 32px));background:var(--paper);border:3px solid var(--ink);border-radius:14px;padding:12px 16px;font-size:clamp(15px,3.9vw,19px);line-height:1.45;box-shadow:0 6px 0 #0004;opacity:0;transition:opacity .3s;pointer-events:none}
+#cap.on{opacity:1}
+#cap b{color:var(--red)}
+#card{position:fixed;inset:auto 0 0 0;display:flex;justify-content:center;padding:16px 16px 24px}
+#card[hidden]{display:none}
+#card .in{max-width:440px;background:var(--paper);border:3px solid var(--ink);border-radius:16px;padding:20px;box-shadow:0 8px 0 #0005;position:relative}
+#card .stamp{position:absolute;top:-14px;right:16px;transform:rotate(8deg);background:var(--red);color:#fff;font-weight:900;padding:4px 12px;border-radius:6px;border:2px solid #fff}
+#card h2{margin:0 0 8px;font-family:serif;letter-spacing:.08em}
+#card p{margin:0 0 14px;line-height:1.6}
+#card .row{display:flex;gap:8px;flex-wrap:wrap}
+#card button{font:inherit;font-weight:700;padding:10px 14px;border-radius:10px;border:2px solid var(--ink);background:#fff;cursor:pointer}
+#card button.main{background:var(--red);color:#fff;border-color:var(--red)}
+</style>
+</head>
+<body>
+<div id="top">
+  <h1>백제 사비성, 서기 660년</h1>
+  <button id="call">히히 나당동맹군 부르기</button>
+  <div id="hint">드래그로 둘러보기 · 휠/두 손가락으로 확대</div>
+</div>
+<div id="cap"></div>
+<div id="card" hidden><div class="in">
+  <div class="stamp">실화</div>
+  <h2>大唐平百濟國碑銘</h2>
+  <p>정림사지 오층석탑(국보) 1층 탑신에는 당나라군이 새긴 이 글이 <b>지금도 남아 있습니다.</b> 남의 나라 탑에 승전 낙서를 한 셈이죠. 성은 잿더미가 됐지만 탑은 1,300년 넘게 그 자리에 서 있습니다.</p>
+  <div class="row"><button class="main" id="again">다시 짓기 (백제 부흥운동)</button><button id="share">링크 복사</button></div>
+</div></div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ---------- helpers
+let seed = 660;
+const rnd = () => { seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const R = (a, b) => a + rnd() * (b - a);
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const sstep = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+const shuffle = a => { for (let i = a.length; i-- > 1;) { const j = (rnd() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+// ---------- renderer / scene
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = innerWidth > 700; // ponytail: 폰은 그림자 끔, 저사양 데스크톱도 느리면 여기서 끄기
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const SKY = new THREE.Color(0x9cc8e8), DUSK = new THREE.Color(0x4a1c10);
+scene.background = SKY.clone();
+scene.fog = new THREE.Fog(SKY.clone(), 700, 1900);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 1, 4000);
+camera.position.set(-330, 260, 480);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(20, 0, 40);
+controls.maxPolarAngle = 1.45; controls.minDistance = 30; controls.maxDistance = 1100;
+controls.enableDamping = true;
+
+const hemi = new THREE.HemisphereLight(0xdfefff, 0x6b5a3a, 1.2);
+scene.add(hemi);
+const SUN0 = new THREE.Color(0xfff1d6), SUN1 = new THREE.Color(0xff7a3c);
+const sun = new THREE.DirectionalLight(SUN0, 2.4);
+sun.position.set(-300, 400, 200);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -450, right: 450, top: 450, bottom: -450, near: 10, far: 1300 });
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+
+// ---------- terrain: 부소산(북), 백마강(서·남), 궁남지
+const river = new THREE.CatmullRomCurve3([
+  [330, -480], [150, -360], [-60, -330], [-230, -260], [-300, -110], [-290, 60], [-240, 200],
+  [-120, 290], [80, 310], [260, 330], [420, 420], [650, 560]
+].map(([x, z]) => V(x, 0, z)));
+const RS = river.getSpacedPoints(400);
+function riverDist(x, z) { let m = 1e12; for (const p of RS) { const d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < m) m = d; } return Math.sqrt(m); }
+const HILL = { x: -10, z: -190 };
+const hillH = (x, z) => 48 * Math.exp(-((x - HILL.x) ** 2 + (z - HILL.z) ** 2) / (2 * 70 * 70));
+const POND = { x: 50, z: 205, rx: 42, rz: 28 };
+const pondD = (x, z) => Math.hypot((x - POND.x) / POND.rx, (z - POND.z) / POND.rz);
+function groundH(x, z) {
+  let h = hillH(x, z);
+  const t = sstep(55, 20, riverDist(x, z)); h = h * (1 - t) - 7 * t;
+  const p = sstep(1.2, 0.95, pondD(x, z)); h = h * (1 - p) - 2.5 * p;
+  return h;
+}
+const isRoad = (x, z) => (Math.abs(x) < 6 && z > 18 && z < 275) || (Math.abs(z - 30) < 5 && x > -250 && x < 340);
+{
+  const geo = new THREE.PlaneGeometry(2400, 2400, 160, 160).rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i), h = groundH(x, z);
+    pos.setY(i, h);
+    if (isRoad(x, z)) c.set(0xb9a27a);
+    else if (h < 0.3 && riverDist(x, z) < 75) c.set(0xcdb98a);
+    else if (hillH(x, z) > 6) c.set(0x4f6e3a);
+    else c.set(0x7f9a52).offsetHSL(0, 0, (rnd() - 0.5) * 0.03);
+    c.toArray(col, i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  const g = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+  g.receiveShadow = true; scene.add(g);
+}
+const WATER = new THREE.MeshStandardMaterial({ color: 0x3f7fa8, roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.92 });
+{
+  const v = [], idx = [];
+  RS.forEach((p, i) => {
+    const a = RS[Math.max(0, i - 1)], b = RS[Math.min(RS.length - 1, i + 1)];
+    const nx = -(b.z - a.z), nz = b.x - a.x, l = Math.hypot(nx, nz);
+    v.push(p.x + nx / l * 46, -2, p.z + nz / l * 46, p.x - nx / l * 46, -2, p.z - nz / l * 46);
+    if (i) idx.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+  const w = new THREE.Mesh(geo, WATER); w.material.side = THREE.DoubleSide; scene.add(w);
+  const pond = new THREE.Mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), WATER);
+  pond.scale.set(POND.rx * 1.1, 1, POND.rz * 1.1); pond.position.set(POND.x, -0.6, POND.z); scene.add(pond);
+}
+{ // 부소산 소나무, 먼 산
+  const trees = new THREE.InstancedMesh(new THREE.ConeGeometry(4, 12, 6), new THREE.MeshStandardMaterial({ color: 0x2f5a2c, flatShading: true }), 700);
+  const d = new THREE.Object3D(); let n = 0;
+  while (n < 700) {
+    const x = R(-150, 130), z = R(-320, -60);
+    if (hillH(x, z) < 7 || riverDist(x, z) < 50) continue;
+    d.position.set(x, groundH(x, z) + 5, z); d.scale.setScalar(R(0.7, 1.3)); d.updateMatrix(); trees.setMatrixAt(n++, d.matrix);
+  }
+  trees.castShadow = true; scene.add(trees);
+  const mm = new THREE.MeshStandardMaterial({ color: 0x6f8794, flatShading: true });
+  for (let i = 0; i < 34; i++) {
+    const a = i / 34 * Math.PI * 2, r = R(950, 1100), m = new THREE.Mesh(new THREE.ConeGeometry(R(140, 240), R(90, 180), 7), mm);
+    m.position.set(Math.cos(a) * r, 30, Math.sin(a) * r); scene.add(m);
+  }
+}
+
+// ---------- buildings
+const TILE = 0x3d4248, THATCH = 0xb08d4a, PLASTER = 0xe2d6b8, MUD = 0xcbb48e, COLUMN = 0x9a3022, WOOD = 0x6b4a2c;
+const CHAR = new THREE.Color(0x1b1512);
+const STONE_M = new THREE.MeshStandardMaterial({ color: 0xa8a39a, roughness: 1, flatShading: true });
+const buildings = [];
+function newBuilding(x, z, rot) {
+  const g = new THREE.Group(); g.position.set(x, groundH(x, z), z); g.rotation.y = rot; scene.add(g);
+  const b = { g, parts: [], mats: [], state: 'ok', t: 0, dur: R(3, 6), floor: 0, x, z };
+  buildings.push(b); return b;
+}
+function mat(c, b) { const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, flatShading: true, side: THREE.DoubleSide }); m.userData.base = new THREE.Color(c); b.mats.push(m); return m; }
+function part(b, geo, m, x, y, z, shadow = true) { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = shadow; me.receiveShadow = true; b.g.add(me); b.parts.push(me); return me; }
+
+// 우진각 지붕: 면 4장을 따로 만들어야 무너질 때 흩어진다
+function roofFaces(W, D, H) {
+  const swap = W < D, L = swap ? D : W, S = swap ? W : D, r = (L - S) / 2;
+  const A = [-L / 2, 0, -S / 2], B = [L / 2, 0, -S / 2], C = [L / 2, 0, S / 2], E = [-L / 2, 0, S / 2], P = [-r, H, 0], Q = [r, H, 0];
+  return [[A, B, Q, P], [C, E, P, Q], [E, A, P], [B, C, Q]].map(f => {
+    const pts = swap ? f.map(([x, y, z]) => [z, y, x]) : f;
+    const c = [0, 1, 2].map(k => pts.reduce((s, p) => s + p[k], 0) / pts.length);
+    const tri = pts.length === 4 ? [pts[0], pts[1], pts[2], pts[0], pts[2], pts[3]] : pts;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(tri.flatMap(p => [p[0] - c[0], p[1] - c[1], p[2] - c[2]]), 3));
+    geo.computeVertexNormals();
+    return { geo, c };
+  });
+}
+function hall(x, z, w, d, h, rot, o = {}) {
+  const b = newBuilding(x, z, rot), base = o.base ?? 1, t = 0.6;
+  const s = new THREE.Mesh(new THREE.BoxGeometry(w + 3, base, d + 3), STONE_M);
+  s.position.y = base / 2; s.receiveShadow = true; b.g.add(s);
+  b.floor = base;
+  const wm = mat(o.wall ?? PLASTER, b), rm = mat(o.roof ?? TILE, b), y = base + h / 2, ws = !!o.cols;
+  if (o.open !== 'z') {
+    part(b, new THREE.BoxGeometry(w, h, t), wm, 0, y, -d / 2 + t / 2, ws);
+    part(b, new THREE.BoxGeometry(w, h, t), wm, 0, y, d / 2 - t / 2, ws);
+    part(b, new THREE.BoxGeometry(w * 0.22, h * 0.7, 0.3), mat(WOOD, b), 0, base + h * 0.35, d / 2 + 0.1, false);
+  }
+  if (o.open !== 'x') {
+    part(b, new THREE.BoxGeometry(t, h, d - 2 * t), wm, -w / 2 + t / 2, y, 0, ws);
+    part(b, new THREE.BoxGeometry(t, h, d - 2 * t), wm, w / 2 - t / 2, y, 0, ws);
+  }
+  if (o.cols) {
+    const cm = mat(COLUMN, b), cg = new THREE.CylinderGeometry(0.45, 0.5, h, 6), n = Math.max(2, Math.round(w / 5));
+    for (let i = 0; i <= n; i++) for (const sz of [-1, 1]) part(b, cg, cm, -w / 2 + i * w / n, y, sz * (d / 2 + 1));
+  }
+  const ov = o.over ?? 3;
+  for (const { geo, c } of roofFaces(w + ov * 2, d + ov * 2, o.rh ?? Math.min(w, d) * 0.45)) part(b, geo, rm, c[0], base + h + c[1], c[2]);
+  return b;
+}
+function wall(x1, z1, x2, z2) {
+  const len = Math.hypot(x2 - x1, z2 - z1), b = newBuilding((x1 + x2) / 2, (z1 + z2) / 2, -Math.atan2(z2 - z1, x2 - x1));
+  const wm = mat(PLASTER, b), rm = mat(TILE, b), n = Math.ceil(len / 8), pc = len / n;
+  b.dur = R(2, 4);
+  for (let i = 0; i < n; i++) {
+    const px = -len / 2 + pc * (i + 0.5);
+    part(b, new THREE.BoxGeometry(pc - 0.2, 3, 1.4), wm, px, 1.5, 0, false);
+    part(b, new THREE.BoxGeometry(pc + 0.4, 0.7, 2.4), rm, px, 3.3, 0);
+  }
+}
+function enclosure(x0, z0, x1, z1, gap) {
+  wall(x0, z0, x1, z0); wall(x0, z0, x0, z1); wall(x1, z0, x1, z1);
+  wall(x0, z1, -gap, z1); wall(gap, z1, x1, z1);
+}
+const house = (x, z, rot) => hall(x, z, R(7, 10), R(5.5, 7), 3, rot, { base: 0.5, over: 1.2, roof: rnd() < 0.6 ? THATCH : TILE, wall: rnd() < 0.5 ? PLASTER : MUD, rh: 3.2 });
+
+// 관북리 왕궁
+enclosure(-75, -110, 75, 18, 9);
+hall(0, 18, 16, 7, 5, 0, { cols: true, open: 'z' });
+hall(0, -55, 40, 20, 8, 0, { base: 3, cols: true, rh: 11, over: 4 });
+hall(-50, -30, 12, 34, 6, 0, { cols: true });
+hall(50, -30, 12, 34, 6, 0, { cols: true });
+hall(0, -92, 30, 12, 6, 0, { cols: true });
+hall(-50, -85, 14, 10, 5, 0);
+hall(50, -85, 14, 10, 5, 0);
+// 정림사
+enclosure(-32, 50, 32, 150, 7);
+hall(0, 150, 12, 6, 5, 0, { cols: true, open: 'z' });
+hall(0, 92, 20, 13, 6, 0, { base: 2, cols: true });
+hall(0, 62, 34, 11, 6, 0, { base: 1.5, cols: true });
+// 궁남지 섬 정자
+{
+  const isl = new THREE.Mesh(new THREE.CylinderGeometry(7, 9, 3, 12), new THREE.MeshStandardMaterial({ color: 0x6f8a45, flatShading: true }));
+  isl.position.set(POND.x, -0.7, POND.z); isl.receiveShadow = true; scene.add(isl);
+  const p = hall(POND.x, POND.z, 6, 6, 3, Math.PI / 4, { base: 0.4, cols: true, open: 'x', rh: 4, over: 1.5 });
+  p.g.position.y = 0.8;
+}
+// 구드래 나루
+{
+  const pier = new THREE.Mesh(new THREE.BoxGeometry(40, 1, 6), new THREE.MeshStandardMaterial({ color: WOOD }));
+  pier.position.set(-268, -0.6, -35); scene.add(pier);
+  hall(-232, -48, 14, 8, 4, Math.PI / 2, { roof: THATCH, wall: MUD });
+  hall(-232, -22, 14, 8, 4, Math.PI / 2, { roof: THATCH, wall: MUD });
+}
+// 나성(흙 성벽, 안 탐) + 동문
+const WALL_PTS = [[110, -260], [210, -215], [290, -130], [320, -20], [330, 100], [320, 200], [290, 290]];
+const GATE = V(325, 0, 30);
+{
+  const geo = new THREE.BoxGeometry(10, 7, 8), m = new THREE.MeshStandardMaterial({ color: 0x9a7b55, roughness: 1, flatShading: true });
+  for (let i = 1; i < WALL_PTS.length; i++) {
+    const [x1, z1] = WALL_PTS[i - 1], [x2, z2] = WALL_PTS[i], len = Math.hypot(x2 - x1, z2 - z1), rot = -Math.atan2(z2 - z1, x2 - x1);
+    for (let s = 0; s < len; s += 9) {
+      const x = x1 + (x2 - x1) * s / len, z = z1 + (z2 - z1) * s / len;
+      if (Math.hypot(x - GATE.x, z - GATE.z) < 11) continue;
+      const me = new THREE.Mesh(geo, m); me.position.set(x, groundH(x, z) + 3, z); me.rotation.y = rot;
+      me.castShadow = me.receiveShadow = true; scene.add(me);
+    }
+  }
+  hall(GATE.x, GATE.z, 10, 20, 5, 0, { cols: true, open: 'x', base: 2 });
+}
+// 시가지
+const CITY = [...WALL_PTS, [80, 262], [-120, 245], [-230, 170], [-250, 60], [-255, -110], [-200, -230], [-60, -290]];
+function inside(x, z) { let c = false; for (let i = 0, j = CITY.length - 1; i < CITY.length; j = i++) { const [xi, zi] = CITY[i], [xj, zj] = CITY[j]; if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) c = !c; } return c; }
+const homes = [];
+for (let gx = -250; gx <= 300; gx += 22) for (let gz = -240; gz <= 270; gz += 22) {
+  const x = gx + R(-4, 4), z = gz + R(-4, 4);
+  if (rnd() < 0.2 || !inside(x, z) || hillH(x, z) > 2.5 || riverDist(x, z) < 55 || pondD(x, z) < 1.5) continue;
+  if ((Math.abs(x) < 85 && z > -120 && z < 28) || (Math.abs(x) < 42 && z > 40 && z < 158)) continue;
+  if ((Math.abs(x) < 12 && z > 18) || Math.abs(z - 30) < 11 || (x < -215 && z > -70 && z < 0)) continue;
+  house(x, z, (rnd() < 0.5 ? 0 : Math.PI / 2) + R(-0.08, 0.08));
+  homes.push(V(x, 0, z));
+}
+
+// 정림사지 오층석탑 — 돌이라 안 탄다
+const PAG = { x: 0, z: 122 };
+let inscription;
+{
+  const g = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color: 0xbdb8ae, roughness: 1, flatShading: true });
+  const add = (geo, y) => { const me = new THREE.Mesh(geo, m); me.position.y = y; me.castShadow = me.receiveShadow = true; g.add(me); };
+  add(new THREE.BoxGeometry(14, 2, 14), 1); add(new THREE.BoxGeometry(11, 1.5, 11), 2.75);
+  let y = 3.5, first;
+  for (let i = 0; i < 5; i++) {
+    const bw = 6.4 * (1 - i * 0.11), bh = i === 0 ? 5.5 : 1.9 * (1 - i * 0.06);
+    if (i === 0) first = { y: y + bh / 2, half: bw / 2 };
+    add(new THREE.BoxGeometry(bw, bh, bw), y + bh / 2); y += bh;
+    add(new THREE.BoxGeometry(bw + 0.8, 0.6, bw + 0.8), y + 0.3); y += 0.6;
+    add(new THREE.CylinderGeometry(bw * 0.72, bw * 1.35, 0.9, 4, 1).rotateY(Math.PI / 4), y + 0.45); y += 0.9;
+  }
+  add(new THREE.CylinderGeometry(0.4, 0.8, 4, 8), y + 2);
+  const c = document.createElement('canvas'); c.width = 128; c.height = 512;
+  const x = c.getContext('2d'); x.fillStyle = '#fff4d6'; x.shadowColor = '#000'; x.shadowBlur = 6; x.font = 'bold 56px serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  [...'大唐平百濟國碑銘'].forEach((ch, i) => x.fillText(ch, 64, 32 + i * 64)); // 갓 새긴 돌은 밝다
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  inscription = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 5.2), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0 }));
+  inscription.position.set(0, first.y, first.half + 0.03); g.add(inscription);
+  g.position.set(PAG.x, groundH(PAG.x, PAG.z), PAG.z); scene.add(g);
+}
+
+// ---------- particles
+const SPR = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, '#fff'); gr.addColorStop(0.4, 'rgba(255,255,255,.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+})();
+function particles(N, size, blending) {
+  const pos = new Float32Array(N * 3).fill(-9999), col = new Float32Array(N * 4), geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 4));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size, map: SPR, vertexColors: true, transparent: true, depthWrite: false, blending }));
+  pts.frustumCulled = false; scene.add(pts);
+  return { N, pos, col, geo, vel: new Float32Array(N * 3), life: new Float32Array(N), max: new Float32Array(N), i: 0 };
+}
+const FIRE = particles(8000, 8, THREE.AdditiveBlending), SMOKE = particles(10000, 20, THREE.NormalBlending);
+function spawn(P, p, vx, vy, vz, life) { const i = P.i; P.i = (i + 1) % P.N; P.pos.set([p.x, p.y, p.z], i * 3); P.vel.set([vx, vy, vz], i * 3); P.life[i] = P.max[i] = life; }
+function updParticles(P, dt, smoke) {
+  for (let i = 0; i < P.N; i++) {
+    if (P.life[i] <= 0) continue;
+    P.life[i] -= dt;
+    const j = i * 3, k = i * 4, f = Math.max(0, P.life[i] / P.max[i]);
+    if (f <= 0) { P.pos[j + 1] = -9999; P.col[k + 3] = 0; continue; }
+    P.vel[j + 1] += (smoke ? 0.5 : 3) * dt;
+    P.pos[j] += P.vel[j] * dt; P.pos[j + 1] += P.vel[j + 1] * dt; P.pos[j + 2] += P.vel[j + 2] * dt;
+    if (smoke) P.col.set([0.22, 0.2, 0.19, Math.min(1, (1 - f) * 5) * f * 0.55], k);
+    else P.col.set([1, 0.2 + 0.7 * f * f, 0.05 + 0.4 * f * f * f, f], k);
+  }
+  P.geo.attributes.position.needsUpdate = P.geo.attributes.color.needsUpdate = true;
+}
+const tmp = V(0, 0, 0);
+function emit(b, fireRate, smokeRate, dt) {
+  for (let n = fireRate * dt + rnd(); n >= 1; n--) {
+    b.parts[(rnd() * b.parts.length) | 0].getWorldPosition(tmp); tmp.x += R(-2, 2); tmp.z += R(-2, 2);
+    spawn(FIRE, tmp, R(-1, 1), R(4, 9), R(-1, 1), R(0.6, 1.2));
+  }
+  for (let n = smokeRate * dt + rnd(); n >= 1; n--) {
+    b.parts[(rnd() * b.parts.length) | 0].getWorldPosition(tmp); tmp.y += 4;
+    spawn(SMOKE, tmp, R(-1, 1) + 3, R(5, 9), R(-1, 1), R(3, 6));
+  }
+}
+
+// ---------- burn & collapse
+const debris = [];
+function ignite(b) { if (b.state === 'ok') { b.state = 'burn'; b.t = 0; } }
+function collapse(b) {
+  b.state = 'down'; b.t = 0;
+  const c = b.g.getWorldPosition(V(0, 0, 0));
+  for (const p of b.parts) {
+    scene.attach(p);
+    const dir = p.position.clone().sub(c).setY(0);
+    if (dir.lengthSq() < 0.01) dir.set(R(-1, 1), 0, R(-1, 1));
+    dir.normalize();
+    debris.push({ m: p, v: V(dir.x * R(2, 7), R(1, 5), dir.z * R(2, 7)), w: V(R(-2, 2), R(-2, 2), R(-2, 2)), floor: c.y + b.floor + R(0.3, 0.9) });
+  }
+}
+function updBuildings(dt) {
+  let gone = 0;
+  for (const b of buildings) {
+    if (b.state === 'ok') continue;
+    gone++; b.t += dt;
+    if (b.state === 'burn') {
+      const k = Math.min(1, b.t / b.dur);
+      for (const m of b.mats) { m.color.copy(m.userData.base).lerp(CHAR, k * 0.9); m.emissive.setRGB(1, 0.35, 0.05).multiplyScalar((0.25 + 0.25 * Math.sin(b.t * 20 + b.x)) * k); }
+      emit(b, 60, 12, dt);
+      if (b.t >= b.dur) collapse(b);
+    } else {
+      for (const m of b.mats) m.emissive.multiplyScalar(0.97);
+      if (b.t < 15) emit(b, b.t < 5 ? 20 : 0, 10, dt);
+    }
+  }
+  return gone / buildings.length;
+}
+function updDebris(dt) {
+  for (let i = debris.length; i--;) {
+    const d = debris[i];
+    d.v.y -= 30 * dt; d.m.position.addScaledVector(d.v, dt);
+    d.m.rotation.x += d.w.x * dt; d.m.rotation.y += d.w.y * dt; d.m.rotation.z += d.w.z * dt;
+    if (d.m.position.y <= d.floor) { d.m.position.y = d.floor; debris.splice(i, 1); }
+  }
+}
+
+// ---------- 군대
+function label(text) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = '#f3e6c8'; x.strokeStyle = '#2b1d14'; x.lineWidth = 4; x.beginPath(); x.roundRect(4, 4, 248, 56, 16); x.fill(); x.stroke();
+  x.fillStyle = '#2b1d14'; x.font = 'bold 32px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 128, 34);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false })); s.scale.set(16, 4, 1); s.renderOrder = 10; return s;
+}
+function figure(robe, text) {
+  const g = new THREE.Group(), M = c => new THREE.MeshStandardMaterial({ color: c, flatShading: true });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.7, 4.2, 8), M(robe)); body.position.y = 2.1;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), M(0xe8c39e)); head.position.y = 5;
+  const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 1.4, 8), M(0x1d1a18)); hat.position.y = 6.1;
+  g.add(body, head, hat); body.castShadow = true;
+  const l = label(text); l.position.y = 9.5; g.add(l);
+  return g;
+}
+function walk(s, dt) { // s: {p, path, k, speed} → 진행 방향 각도
+  const to = s.path[s.k]; if (!to) return null;
+  const dx = to.x - s.p.x, dz = to.z - s.p.z, d = Math.hypot(dx, dz), st = s.speed * dt;
+  if (d <= st) { s.p.x = to.x; s.p.z = to.z; s.k++; } else { s.p.x += dx / d * st; s.p.z += dz / d * st; }
+  s.p.y = groundH(s.p.x, s.p.z);
+  return Math.atan2(dx, dz);
+}
+function boat() {
+  const g = new THREE.Group(), M = c => new THREE.MeshStandardMaterial({ color: c, flatShading: true, side: THREE.DoubleSide });
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(5, 2.4, 16), M(0x5a3b22)); hull.position.y = 0.6;
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 13, 5), M(0x3a2a1a)); mast.position.y = 7;
+  const sail = new THREE.Mesh(new THREE.PlaneGeometry(9, 8), M(0xeee3c7)); sail.position.set(0, 8, 0.4);
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(3, 2), M(0xc8a12a)); flag.position.set(1.5, 13, 0);
+  g.add(hull, mast, sail, flag); hull.castShadow = sail.castShadow = true;
+  return g;
+}
+const boats = Array.from({ length: 14 }, (_, i) => ({ g: boat(), u: 1, target: 0.75 - i * 0.023, start: 1 + i * 0.35, on: false }));
+const SOLDIERS = 260;
+const army = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 3.2, 1.6), new THREE.MeshStandardMaterial({ color: 0xa33a2a, flatShading: true }), SOLDIERS);
+army.castShadow = true; army.visible = false; army.frustumCulled = false; scene.add(army);
+const soldiers = Array.from({ length: SOLDIERS }, (_, i) => {
+  const home = homes[(rnd() * homes.length) | 0];
+  return { p: V(R(560, 700), 0, 30 + R(-60, 60)), k: 0, speed: R(20, 26), delay: 1 + i * 0.02, rot: 0,
+    path: [V(GATE.x + 8, 0, GATE.z + R(-3, 3)), V(300, 0, 30 + R(-4, 4)), home.clone().add(V(R(-8, 8), 0, R(-8, 8)))] };
+});
+const dummy = new THREE.Object3D();
+function updArmy(dt) {
+  soldiers.forEach((s, i) => {
+    if (seqT < s.delay) { dummy.position.set(0, -999, 0); }
+    else {
+      const a = walk(s, dt); if (a !== null) s.rot = a;
+      dummy.position.set(s.p.x, s.p.y + 1.6 + (a !== null ? Math.abs(Math.sin(seqT * 10 + i)) * 0.6 : 0), s.p.z);
+      dummy.rotation.y = s.rot;
+    }
+    dummy.updateMatrix(); army.setMatrixAt(i, dummy.matrix);
+  });
+  army.instanceMatrix.needsUpdate = true;
+}
+function updBoats(dt) {
+  for (const b of boats) {
+    if (seqT < b.start) continue;
+    if (!b.on) { b.on = true; scene.add(b.g); }
+    b.u = Math.max(b.target, b.u - 0.05 * dt * Math.min(1, (b.u - b.target) * 20 + 0.15));
+    const p = river.getPointAt(b.u), t = river.getTangentAt(b.u);
+    b.g.position.set(p.x, -2 + Math.sin(seqT * 2 + b.start) * 0.2, p.z);
+    b.g.rotation.y = Math.atan2(-t.x, -t.z);
+  }
+}
+
+// ---------- 불화살
+const ARROW_GEO = new THREE.CylinderGeometry(0.15, 0.15, 4, 4).rotateX(Math.PI / 2), ARROW_M = new THREE.MeshBasicMaterial({ color: 0x2a1a0e });
+const arrows = [];
+function shooter() {
+  const bs = boats.filter(b => b.on), ss = soldiers.filter(s => seqT > s.delay + 3);
+  if (bs.length && (rnd() < 0.5 || !ss.length)) return bs[(rnd() * bs.length) | 0].g.position.clone().setY(4);
+  if (ss.length) { const s = ss[(rnd() * ss.length) | 0]; return s.p.clone().setY(s.p.y + 3); }
+  return V(450, 10, 30);
+}
+function shoot(b) {
+  const from = shooter(), to = b.g.position.clone().add(V(R(-3, 3), b.floor + 5, R(-3, 3)));
+  const m = new THREE.Mesh(ARROW_GEO, ARROW_M); scene.add(m);
+  arrows.push({ m, from, to, b, t: 0, T: 1.2 + from.distanceTo(to) / 200, arc: from.distanceTo(to) * 0.25 });
+}
+function updArrows(dt) {
+  for (let i = arrows.length; i--;) {
+    const a = arrows[i]; a.t += dt;
+    const u = Math.min(1, a.t / a.T), pos = (u) => tmp.lerpVectors(a.from, a.to, u).setY(tmp.y + a.arc * 4 * u * (1 - u));
+    a.m.position.copy(pos(u)); a.m.lookAt(pos(Math.min(1, u + 0.02)));
+    spawn(FIRE, a.m.position, 0, 1, 0, 0.4);
+    if (u >= 1) { scene.remove(a.m); arrows.splice(i, 1); ignite(a.b); }
+  }
+}
+
+// ---------- 연출
+const cap = document.getElementById('cap');
+const say = html => { cap.innerHTML = html; cap.classList.add('on'); };
+let tween = null;
+function flyTo(p, t, T = 2.5) { tween = { p0: camera.position.clone(), t0: controls.target.clone(), p1: V(...p), t1: V(...t), t: 0, T }; controls.enabled = false; }
+function updTween(dt) {
+  if (!tween) return controls.update();
+  tween.t += dt; const u = Math.min(1, tween.t / tween.T), e = u * u * (3 - 2 * u);
+  camera.position.lerpVectors(tween.p0, tween.p1, e); controls.target.lerpVectors(tween.t0, tween.t1, e); camera.lookAt(controls.target);
+  if (u >= 1) { tween = null; controls.enabled = true; }
+}
+const king = { g: figure(0xd9a441, '의자왕'), p: V(0, 0, -40), k: 0, speed: 35, path: [V(60, 0, -60), V(140, 0, -120), V(220, 0, -240), V(320, 0, -380)] };
+king.g.position.set(0, groundH(0, -40), -40); scene.add(king.g);
+const sojb = figure(0x2c4a7a, '소정방'); sojb.visible = false; sojb.position.set(-8, groundH(-8, 129), 129); sojb.rotation.y = 2.3; scene.add(sojb);
+
+let running = false, seqT = 0, tl = 0, shots = [], shotI = 0, inscribing = -1;
+const TL = [
+  [0, () => { say('<b>660년 7월</b>, 백제 사비성. 평화롭습니다. 아직은.'); flyTo([560, 300, 460], [40, 0, 40], 3); }],
+  [3, () => say('🚢 <b>당 소정방</b>: 13만 명 데리고 백마강 타고 왔음 ㅎㅇ')],
+  [6.5, () => say('⚔️ <b>신라 김유신</b>: 황산벌 뚫고 옴 (계백 장군님 죄송합니다)')],
+  [9.5, () => say('🔥 불화살 발사!')],
+  [12.5, () => say('👑 <b>의자왕</b>: 아 나 웅진 잠깐 다녀올게… 금방 옴')],
+  [17, () => say('🏯 궁궐도 활활… (그 와중에 나성은 흙이라 멀쩡)')],
+  [22, () => say('백제 678년, 마무리 들어갑니다')],
+  [29, () => say('…그렇게 사비성은 잿더미가 되었습니다.')],
+  [33, () => { say('그런데 딱 하나 안 탄 게 있으니… <b>정림사지 오층석탑</b> (돌이라서)'); flyTo([28, 14, 166], [0, 1, 122], 3); }],
+  [37, () => { sojb.visible = true; say('<b>소정방</b>: 오 탑 좋네. 기념으로 한 줄 써야지 ㅎ'); }],
+  [40, () => { inscribing = 0; say('<b>「大唐平百濟國碑銘」</b> — 당나라가 백제를 평정했다는 글'); }],
+  [44.5, () => { cap.classList.remove('on'); document.getElementById('card').hidden = false; }],
+];
+document.getElementById('call').onclick = e => {
+  e.target.disabled = true; document.getElementById('hint').hidden = true;
+  running = true; army.visible = true;
+  const targets = shuffle(buildings.slice()), n = targets.length;
+  shots = targets.map((b, i) => ({ b, t: 9.5 + 14.5 * Math.pow(i / n, 0.8) }));
+};
+document.getElementById('again').onclick = () => location.reload();
+document.getElementById('share').onclick = async e => {
+  try { if (navigator.share) await navigator.share({ title: document.title, url: location.href }); else { await navigator.clipboard.writeText(location.href); e.target.textContent = '복사됨!'; } } catch {}
+};
+
+// ---------- loop
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (running) {
+    seqT += dt;
+    while (tl < TL.length && seqT >= TL[tl][0]) TL[tl++][1]();
+    while (shotI < shots.length && seqT >= shots[shotI].t) shoot(shots[shotI++].b);
+    updBoats(dt); updArmy(dt);
+    if (seqT > 12.5) { const a = walk(king, dt); if (a !== null) { king.g.rotation.y = a; king.g.position.set(king.p.x, king.p.y + Math.abs(Math.sin(seqT * 14)) * 1.2, king.p.z); } else king.g.visible = false; }
+    if (inscribing >= 0 && inscribing < 1) {
+      inscribing = Math.min(1, inscribing + dt / 2.5); inscription.material.opacity = inscribing;
+      inscription.getWorldPosition(tmp); tmp.z += 0.3; tmp.y += R(-2.5, 2.5);
+      spawn(SMOKE, tmp, R(-1, 1), R(0, 2), R(1, 3), 0.8);
+    }
+  }
+  updArrows(dt); updDebris(dt);
+  const k = updBuildings(dt);
+  updParticles(FIRE, dt, false); updParticles(SMOKE, dt, true);
+  scene.background.copy(SKY).lerp(DUSK, k * 0.85); scene.fog.color.copy(scene.background);
+  sun.color.copy(SUN0).lerp(SUN1, k); hemi.intensity = 1.2 - k * 0.6;
+  updTween(dt);
+  renderer.render(scene, camera);
+});
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+</script>
+</body>
+</html>
